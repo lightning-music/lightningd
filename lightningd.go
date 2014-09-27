@@ -3,8 +3,7 @@ package main
 import (
 	"encoding/json"
 	"flag"
-	"github.com/lightning/go/api"
-	"github.com/lightning/go/seq"
+	"github.com/lightning/go"
 	"io/ioutil"
 	"log"
 	"os"
@@ -24,7 +23,7 @@ func main() {
 	ch2 := flag.String("ch2", defaultCh2, "right channel JACK sink")
 	// parse cli flags
 	flag.Parse()
-	server, err := api.NewServer(*www, *audio)
+	server, err := lightning.NewServer(*www, *audio)
 	if err != nil {
 		log.Fatal("could not create server: " + err.Error())
 	}
@@ -36,7 +35,7 @@ func main() {
 	server.Listen(*bind)
 
 	/* setup a pattern from a chunk of json */
-	pat := seq.NewPattern(0)
+	pat := lightning.NewPattern(0)
 	content, err := ioutil.ReadFile("pat.json")
 	if err != nil {
 		log.Fatal("could not read pat.json")
