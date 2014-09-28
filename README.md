@@ -3,6 +3,8 @@ lightningd
 
 lightningd server
 
+[![Build Status](https://travis-ci.org/lightning/lightningd.svg?branch=master)](https://travis-ci.org/lightning/go)
+
 ### Prerequisites
 
 - [liblightning](https://github.com/lightning/liblightning)
