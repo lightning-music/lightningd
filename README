@@ -1,16 +1,17 @@
-lightningd
-==========
+lightningd is the server component of lightning.
 
-lightningd server
 
-[![Build Status](https://travis-ci.org/lightning/lightningd.svg?branch=master)](https://travis-ci.org/lightning/go)
 
-### Prerequisites
+# Build
+
+Prerequisites:
 
 - [liblightning](https://github.com/lightning/liblightning)
 - [lightning/go](https://github.com/lightning/go)
 
-### Install
+
+
+# Install
 
 ```shell
 $ go get github.com/lightning/lightningd
@@ -21,3 +22,5 @@ $ go get github.com/lightning/lightningd
 ```shell
 $ lightningd -h
 ```
+
+[1]: http://sorahan.net/liblightning
