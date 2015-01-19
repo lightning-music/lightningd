@@ -2,4 +2,4 @@
 *.log
 lightningd
 *.tar.gz
-lightning-*
+lightning/

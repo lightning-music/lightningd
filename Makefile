@@ -1,11 +1,7 @@
-V_MAJOR=0
-V_MINOR=1
-V_PATCH=0
-V=$(V_MAJOR).$(V_MINOR).$(V_PATCH)
-PKG_DIR=lightning-$(V)
+PKG_DIR=lightning
 PKG=$(PKG_DIR).tar.gz
 
-.PHONY: all pkg
+.PHONY: all pkg clean
 
 # GOINSTALL := go install -ldflags -w -gcflags "-N -l"
 GOINSTALL := go install -a
@@ -24,3 +20,6 @@ $(PKG_DIR):
 pkg: $(PKG_DIR) lightningd
 	cp lightningd README $(PKG_DIR)
 	tar czf $(PKG) $(PKG_DIR)
+
+clean:
+	rm -rf *.tar.gz lightningd *.log lightning-* *~ $(PKG_DIR)
