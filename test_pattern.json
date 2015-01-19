@@ -1,0 +1,66 @@
+[
+    {
+        "pos" : 0,
+        "note" : {
+            "sample": "blip.wav",
+            "number": 60,
+            "velocity": 96
+        }
+    },
+    {
+        "pos" : 1,
+        "note" : {
+            "sample": "blip.wav",
+            "number": 62,
+            "velocity": 96
+        }
+    },
+    {
+        "pos" : 2,
+        "note" : {
+            "sample": "blip.wav",
+            "number": 64,
+            "velocity": 96
+        }
+    },
+    {
+        "pos" : 3,
+        "note" : {
+            "sample": "blip.wav",
+            "number": 65,
+            "velocity": 96
+        }
+    },
+    {
+        "pos" : 4,
+        "note" : {
+            "sample": "piano.wav",
+            "number": 60,
+            "velocity": 96
+        }
+    },
+    {
+        "pos" : 5,
+        "note" : {
+            "sample": "piano.wav",
+            "number": 62,
+            "velocity": 96
+        }
+    },
+    {
+        "pos" : 6,
+        "note" : {
+            "sample": "piano.wav",
+            "number": 64,
+            "velocity": 96
+        }
+    },
+    {
+        "pos" : 7,
+        "note" : {
+            "sample": "piano.wav",
+            "number": 65,
+            "velocity": 96
+        }
+    }
+]
