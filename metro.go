@@ -17,7 +17,7 @@ type MetroFunc func(pos Pos)
 // changing the timing of the underlying time.Ticker
 // and starting/stopping.
 type Metro struct {
-	Tempo   Tempo    `json:"tempo"`
+	Tempo   Tempo  `json:"tempo"`
 	Bardiv  string `json:"div"`
 	Channel chan Pos
 	F       MetroFunc
