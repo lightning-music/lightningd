@@ -5,18 +5,24 @@ import (
 	"github.com/lightning/go"
 )
 
+const (
+	NoteAdd = iota
+	NoteRemove
+)
+
 // Tempo in bpm
 type Tempo uint64
 
 // Pattern encapsulates a sequence for a given sample
 type Pattern struct {
-	Length     int      `json:"length"`
-	Notes      [][]lightning.Note `json:"notes"`
+	Length int                `json:"length"`
+	Notes  [][]lightning.Note `json:"notes"`
 }
 
 type PatternEdit struct {
-	Pos  Pos  `json:"pos"`
-	Note lightning.Note `json:"note"`
+	Pos    Pos            `json:"pos"`
+	Action int            `json:"action"`
+	Note   lightning.Note `json:"note"`
 }
 
 func (this *Pattern) indexTooLarge(pos Pos) error {
