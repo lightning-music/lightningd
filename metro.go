@@ -58,6 +58,7 @@ func (this *Metro) Start() error {
 		return err
 	}
 	this.ticker = time.NewTicker(dur)
+	fmt.Println("starting count")
 	go count(this)
 	return nil
 }

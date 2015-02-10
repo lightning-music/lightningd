@@ -33,6 +33,10 @@ type Server interface {
 	Listen(addr string) error
 }
 
+type posMessage struct {
+	Position Pos `json:"position"`
+}
+
 type simp struct {
 	engine    lightning.Engine
 	oscServer *osc.OscServer
@@ -109,7 +113,7 @@ func (this *simp) playSample() http.HandlerFunc {
 		}
 
 		// log.Printf("playing %v\n", bytes.NewBuffer(msg).String())
-		// 	note.Sample(), note.Number(), note.Velocity())
+		// note.Sample(), note.Number(), note.Velocity())
 
 		ep := this.engine.PlayNote(note)
 		if ep != nil {
@@ -172,6 +176,32 @@ func (this *simp) patternEdit() http.HandlerFunc {
 	})
 }
 
+// generate endpoint for editing pattern
+func (this *simp) patternPosition() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		// upgrade http connection
+		var upgrader = websocket.Upgrader{
+			ReadBufferSize:  1024,
+			WriteBufferSize: 1024,
+		}
+		conn, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			log.Println("could not upgrade http conn to ws: " + err.Error())
+			return
+		}
+		// get messages and call handler
+		go func() {
+			for {
+				log.Println("waiting for PosChan message")
+				pos := <-this.sequencer.PosChan
+				log.Println("done waiting for PosChan message")
+				// broadcast position
+				conn.WriteJSON(posMessage{pos})
+			}
+		}()
+	}
+}
+
 func NewServer(webRoot string) (Server, error) {
 	// our pattern has 16384 sixteenth notes,
 	// which means we have 1024 bars available
@@ -184,11 +214,13 @@ func NewServer(webRoot string) (Server, error) {
 	if ead != nil {
 		return nil, ead
 	}
+	// initialize sequencer
+	seq := NewSequencer(engine, PATTERN_LENGTH, Tempo(120), PATTERN_DIV)
 	// initialize server
 	srv := &simp{
 		engine,
 		osc.NewOscServer(OSC_ADDR, OSC_PORT),
-		NewSequencer(engine, PATTERN_LENGTH, Tempo(120), PATTERN_DIV),
+		seq,
 	}
 	// api handler
 	api, ea := NewApi(audioRoot)
@@ -222,5 +254,6 @@ func NewServer(webRoot string) (Server, error) {
 	http.HandleFunc("/pattern", srv.patternEdit())
 	http.HandleFunc("/pattern/play", srv.patternPlay())
 	http.HandleFunc("/pattern/stop", srv.patternStop())
+	http.HandleFunc("/pattern/position", srv.patternPosition())
 	return srv, nil
 }

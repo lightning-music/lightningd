@@ -19,8 +19,8 @@ GOINSTALL := go install -a
 
 all .DEFAULT: $(PROG)
 
-lightningd:
-	go build $(SRC)
+lightningd: $(SRC)
+	go build $^
 
 install:
 	$(GOINSTALL)

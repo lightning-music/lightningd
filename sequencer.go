@@ -1,26 +1,53 @@
 package main
 
 import (
-	"github.com/lightning/go"
+	lightning "github.com/lightning/go"
 )
 
 // Sequencer provides a way to play a Pattern using timing
 // events emitted from a Metro.
 type Sequencer struct {
-	metro   *Metro
-	pattern Pattern `json:"pattern"`
+	PosChan    chan Pos
+	PlayErrors chan error
+	engine     lightning.Engine
+	metro      *Metro
+	pattern    Pattern `json:"pattern"`
 }
 
 // NewSequencer creates a Sequencer.
 func NewSequencer(engine lightning.Engine, patternSize int, tempo Tempo, bardiv string) *Sequencer {
 	seq := new(Sequencer)
+	seq.PosChan = make(chan Pos, 32)
+	seq.PlayErrors = make(chan error)
+	seq.engine = engine
 	seq.pattern = NewPattern(patternSize)
 	seq.metro = NewMetro(tempo, bardiv, func(pos Pos) {
-		for _, note := range seq.pattern.NotesAt(pos) {
-			engine.PlayNote(note)
+		seq.PosChan <- pos
+		err := seq.PlayNotesAt(pos)
+		if err != nil {
+			// Crash if sample playback errors are not handled!
+			select {
+			case seq.PlayErrors <- err:
+			default:
+				panic(err)
+			}
 		}
 	})
 	return seq
+}
+
+// Play plays all the notes stored at pos
+func (this *Sequencer) PlayNotesAt(pos Pos) error {
+	var err error
+	for _, note := range this.pattern.NotesAt(pos) {
+		if note != nil {
+			err = this.engine.PlayNote(note)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 // NotesAt returns a slice representing the notes
@@ -30,10 +57,14 @@ func (this *Sequencer) NotesAt(pos Pos) []lightning.Note {
 	return this.pattern.NotesAt(pos)
 }
 
-// AddTo adds a note to the Sequencer's pattern
-// at pos.
+// AddTo adds a note to the Sequencer's pattern at pos.
 func (this *Sequencer) AddTo(pos Pos, note lightning.Note) error {
 	return this.pattern.AddTo(pos, note)
+}
+
+// AddTo adds a note to the Sequencer's pattern at pos.
+func (this *Sequencer) RemoveFrom(pos Pos, note lightning.Note) error {
+	return this.pattern.RemoveFrom(pos, note)
 }
 
 // Clear removes all the notes at a given position

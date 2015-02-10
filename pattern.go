@@ -43,7 +43,31 @@ func (this *Pattern) AddTo(pos Pos, note lightning.Note) error {
 	if int(pos) < 0 {
 		return this.indexNegative(pos)
 	}
-	this.Notes[int(pos)] = append(this.Notes[int(pos)], note)
+	// try to insert to a nil position
+	inserted := false
+	notes := this.Notes[int(pos)]
+	for i, n := range notes {
+		if n == nil {
+			inserted = true
+			notes[i] = note
+		}
+	}
+	// if there were no nil positions, append
+	if !inserted {
+		this.Notes[int(pos)] = append(this.Notes[int(pos)], note)
+	}
+	return nil
+}
+
+// RemoveFrom removes a note from a particular position in a pattern
+func (this *Pattern) RemoveFrom(pos Pos, note lightning.Note) error {
+	if int(pos) >= this.Length {
+		return this.indexTooLarge(pos)
+	}
+	if int(pos) < 0 {
+		return this.indexNegative(pos)
+	}
+	this.Notes[int(pos)] = nil
 	return nil
 }
 
