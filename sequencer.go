@@ -11,10 +11,10 @@ type Sequencer struct {
 	PlayErrors chan error
 	engine     lightning.Engine
 	metro      *Metro
-	pattern    Pattern `json:"pattern"`
+	pattern    *Pattern `json:"pattern"`
 }
 
-// NewSequencer creates a Sequencer.
+// NewSequencer creates a Sequencer
 func NewSequencer(engine lightning.Engine, patternSize int, tempo Tempo, bardiv string) *Sequencer {
 	seq := new(Sequencer)
 	seq.PosChan = make(chan Pos, 32)
@@ -53,17 +53,17 @@ func (this *Sequencer) PlayNotesAt(pos Pos) error {
 // NotesAt returns a slice representing the notes
 // that are stored at a particular position in the
 // Sequencer's Pattern.
-func (this *Sequencer) NotesAt(pos Pos) []lightning.Note {
+func (this *Sequencer) NotesAt(pos Pos) []*lightning.Note {
 	return this.pattern.NotesAt(pos)
 }
 
 // AddTo adds a note to the Sequencer's pattern at pos.
-func (this *Sequencer) AddTo(pos Pos, note lightning.Note) error {
+func (this *Sequencer) AddTo(pos Pos, note *lightning.Note) error {
 	return this.pattern.AddTo(pos, note)
 }
 
 // AddTo adds a note to the Sequencer's pattern at pos.
-func (this *Sequencer) RemoveFrom(pos Pos, note lightning.Note) error {
+func (this *Sequencer) RemoveFrom(pos Pos, note *lightning.Note) error {
 	return this.pattern.RemoveFrom(pos, note)
 }
 

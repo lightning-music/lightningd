@@ -51,8 +51,12 @@ func (this *simp) Listen(addr string) error {
 	return http.ListenAndServe(addr, nil)
 }
 
-func (this *simp) AddTo(pos Pos, note lightning.Note) error {
+func (this *simp) AddTo(pos Pos, note *lightning.Note) error {
 	return this.sequencer.AddTo(pos, note)
+}
+
+func (this *simp) RemoveFrom(pos Pos, note *lightning.Note) error {
+	return this.sequencer.RemoveFrom(pos, note)
 }
 
 // generate the MetroFunc that wires the metro to
@@ -102,13 +106,13 @@ func (s *simp) upgrade(handler WebsocketHandler) http.HandlerFunc {
 	}
 }
 
-func (this *simp) playSample() http.HandlerFunc {
+func (this *simp) samplePlay() http.HandlerFunc {
 	return this.upgrade(func(conn *websocket.Conn, msgType int, msg []byte) {
 		var res Response
-		note, enp := ParseNote(msg)
-		if enp != nil && len(msg) > 0 {
+		note, decerr := lightning.DecodeNote(msg)
+		if decerr != nil && len(msg) > 0 {
 			fmtstr := "could not parse note from %s: %s\n"
-			log.Printf(fmtstr, bytes.NewBuffer(msg).String(), enp.Error())
+			log.Printf(fmtstr, bytes.NewBuffer(msg).String(), decerr.Error())
 			return
 		}
 
@@ -120,7 +124,7 @@ func (this *simp) playSample() http.HandlerFunc {
 			log.Println("could not play note: " + ep.Error())
 			return
 		}
-		res = Response{"ok", "played " + note.Sample()}
+		res = Response{"ok", "played " + note.Sample}
 		resb, em := json.Marshal(res)
 		if em != nil {
 			log.Println("could not marshal response: " + em.Error())
@@ -147,8 +151,8 @@ func (this *simp) patternStop() http.HandlerFunc {
 	})
 }
 
-// generate endpoint for editing pattern
-func (this *simp) patternEdit() http.HandlerFunc {
+// generate endpoint for adding notes to a pattern
+func (this *simp) noteAdd() http.HandlerFunc {
 	return this.upgrade(func(conn *websocket.Conn, msgType int, msg []byte) {
 		var res Response
 		pes := make([]PatternEdit, 0)
@@ -161,7 +165,7 @@ func (this *simp) patternEdit() http.HandlerFunc {
 		for _, pe := range pes {
 			err := this.AddTo(pe.Pos, pe.Note)
 			if err != nil {
-				log.Println("could not set note: " + err.Error())
+				log.Println("could not add note: " + err.Error())
 				return
 			}
 		}
@@ -170,13 +174,38 @@ func (this *simp) patternEdit() http.HandlerFunc {
 		if ee != nil {
 			log.Println("could not encode response: " + ee.Error())
 		}
-		// buf := bytes.NewBuffer(resb)
 		conn.WriteMessage(msgType, resb)
-		// fmt.Fprintf(conn, "%s", buf.String())
 	})
 }
 
-// generate endpoint for editing pattern
+// generate endpoint for removing notes from a pattern
+func (this *simp) noteRemove() http.HandlerFunc {
+	return this.upgrade(func(conn *websocket.Conn, msgType int, msg []byte) {
+		var res Response
+		pes := make([]PatternEdit, 0)
+		eum := json.Unmarshal(msg, &pes)
+		if eum != nil && len(msg) > 0 {
+			log.Println("could not unmarshal request body: " + eum.Error())
+			log.Printf("request body: %s\n", bytes.NewBuffer(msg).String())
+			return
+		}
+		for _, pe := range pes {
+			err := this.RemoveFrom(pe.Pos, pe.Note)
+			if err != nil {
+				log.Println("could not remove note: " + err.Error())
+				return
+			}
+		}
+		res = Response{"ok", "note removed"}
+		resb, ee := json.Marshal(res)
+		if ee != nil {
+			log.Println("could not encode response: " + ee.Error())
+		}
+		conn.WriteMessage(msgType, resb)
+	})
+}
+
+// generate endpoint for sending pattern position
 func (this *simp) patternPosition() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// upgrade http connection
@@ -194,7 +223,7 @@ func (this *simp) patternPosition() http.HandlerFunc {
 			for {
 				log.Println("waiting for PosChan message")
 				pos := <-this.sequencer.PosChan
-				log.Println("done waiting for PosChan message")
+				log.Println("got PosChan message")
 				// broadcast position
 				conn.WriteJSON(posMessage{pos})
 			}
@@ -237,7 +266,7 @@ func NewServer(webRoot string) (Server, error) {
 		pitch := msg.Arguments[1].(int32)
 		gain := msg.Arguments[2].(int32)
 		log.Printf("Note(%s, %d, %d)\n", samp, pitch, gain)
-		note := NewNote(samp, pitch, gain)
+		note := lightning.NewNote(samp, pitch, gain)
 		srv.engine.PlayNote(note)
 	}
 	srv.oscServer.AddMsgHandler("/sample/play", pm)
@@ -250,8 +279,9 @@ func NewServer(webRoot string) (Server, error) {
 	// ReST endpoints
 	http.HandleFunc("/samples", api.ListSamples())
 	// websocket endpoints
-	http.Handle("/sample/play", srv.playSample())
-	http.HandleFunc("/pattern", srv.patternEdit())
+	http.Handle("/sample/play", srv.samplePlay())
+	http.HandleFunc("/note/add", srv.noteAdd())
+	http.HandleFunc("/note/remove", srv.noteRemove())
 	http.HandleFunc("/pattern/play", srv.patternPlay())
 	http.HandleFunc("/pattern/stop", srv.patternStop())
 	http.HandleFunc("/pattern/position", srv.patternPosition())
