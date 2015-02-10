@@ -10,12 +10,12 @@ type Tempo uint64
 
 // Pattern encapsulates a sequence for a given sample
 type Pattern struct {
-	Length     int      `json:"length"`
-	Notes      [][]lightning.Note `json:"notes"`
+	Length int                `json:"length"`
+	Notes  [][]lightning.Note `json:"notes"`
 }
 
 type PatternEdit struct {
-	Pos  Pos  `json:"pos"`
+	Pos  Pos            `json:"pos"`
 	Note lightning.Note `json:"note"`
 }
 
