@@ -29,7 +29,7 @@ type Metro struct {
 // Stop stops the Metro.
 func (this *Metro) Stop() {
 	this.ticker.Stop()
-	// signal the count gorouting to exit
+	// signal the count goroutine to exit
 	this.stop <- 1
 	// wait for it to exit
 	<-this.stop
