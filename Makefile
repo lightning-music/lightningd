@@ -7,14 +7,12 @@ WWW_GIT=https://github.com/lightning/www.git
 SRC=lightningd.go            \
     api.go                   \
     metro.go                 \
-    note.go                  \
     pattern.go               \
     sequencer.go             \
     server.go
 
 .PHONY: all pkg clean
 
-# GOINSTALL := go install -ldflags -w -gcflags "-N -l"
 GOINSTALL := go install -a
 
 all .DEFAULT: $(PROG)
