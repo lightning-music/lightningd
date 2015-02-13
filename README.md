@@ -10,19 +10,17 @@ websocket-controlled music sequencer for lightning
 
 Prerequisites:
 
-- [liblightning](https://github.com/lightning/liblightning)
-- [lightning/go](https://github.com/lightning/go)
+- [liblightning][1]
+- [lightning/go]()
 
-# Install
-
-```shell
-$ go get github.com/lightning/lightningd
-```
-
-### Usage
+Make a lightningd executable:
 
 ```shell
-$ lightningd -h
+$ make
 ```
 
-[1]: http://sorahan.net/liblightning
+Then go [here][3] for information on how to run lightningd and use the websocket API.
+
+[1]: https://github.com/lightning/liblightning
+[2]: https://github.com/lightning/go
+[3]: https://github.com/lightning/lightning
