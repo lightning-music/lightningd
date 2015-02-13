@@ -29,9 +29,92 @@ func TestPatternNotesAt(t *testing.T) {
 }
 
 func TestPatternAddTo(t *testing.T) {
+	// setup pattern
 	pat := NewPattern(1)
-	note := lightning.NewNote("audio/file.flac", 72, 96)
-	pat.AddTo(0, note)
+	err := pat.AddTo(0, lightning.NewNote("audio/file.flac", 72, 96))
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = pat.AddTo(0, lightning.NewNote("audio/file.flac", 76, 50))
+	if err != nil {
+		t.Fatal(err)
+	}
+	
+	// try to add a note at a pos greater than pattern size - 1
+	err = pat.AddTo(Pos(pat.Length+1), lightning.NewNote("file.wav", 59, 114))
+	if err == nil {
+		t.Fatalf("expected err when adding note but got nil")
+	}
+	assert.Equal(t, err.Error(), "pos (2) greater than pattern length (1)")
+
+	firstNotes := pat.NotesAt(0)
+	assert.Equal(t, len(firstNotes), 2)
+	assert.Equal(t, firstNotes[0].Number, int32(72))
+	assert.Equal(t, firstNotes[0].Velocity, int32(96))
+	assert.Equal(t, firstNotes[1].Number, int32(76))
+	assert.Equal(t, firstNotes[1].Velocity, int32(50))
+}
+
+func TestPatternRemoveFrom(t *testing.T) {
+	// setup pattern
+	pat := NewPattern(1)
+	err := pat.AddTo(0, lightning.NewNote("audio/file.flac", 72, 96))
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = pat.AddTo(0, lightning.NewNote("audio/file.flac", 58, 108))
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = pat.RemoveFrom(0, int32(72))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// look at the notes at pos 0
+	firstNotes := pat.NotesAt(0)
+	assert.Equal(t, len(firstNotes), 2)
+	if firstNotes[0] != nil {
+		t.Fatalf("failed to remove note")
+	}
+	assert.Equal(t, firstNotes[1].Number, int32(58))
+	assert.Equal(t, firstNotes[1].Velocity, int32(108))
+}
+
+func TestPatternClear(t *testing.T) {
+	// setup a pattern
+	pat := NewPattern(2)
+	err := pat.AddTo(0, lightning.NewNote("foo.ogg", 93, 72))
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = pat.AddTo(0, lightning.NewNote("foo.ogg", 90, 83))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// verify the notes we just added
+	firstNotes := pat.NotesAt(0)
+	assert.Equal(t, 2, len(firstNotes))
+	assert.Equal(t, firstNotes[0].Sample, "foo.ogg")
+	if num := firstNotes[0].Number; num != 93 {
+		t.Fatalf("expected note number 93, but got %d", num)
+	}
+	if num := firstNotes[0].Velocity; num != 72 {
+		t.Fatalf("expected note velocity 72, but got %d", num)
+	}
+	assert.Equal(t, firstNotes[0].Sample, "foo.ogg")
+	if num := firstNotes[1].Number; num != 90 {
+		t.Fatalf("expected note number 90, but got %d", num)
+	}
+	if num := firstNotes[1].Velocity; num != 83 {
+		t.Fatalf("expected note velocity 83, but got %d", num)
+	}
+	// clear them
+	err = pat.Clear(0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	noNotes := pat.NotesAt(0)
+	assert.Equal(t, len(noNotes), 0)
 }
 
 func TestPatternEncodeJson(t *testing.T) {

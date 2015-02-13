@@ -63,7 +63,7 @@ func (this *Sequencer) AddTo(pos Pos, note *lightning.Note) error {
 }
 
 // AddTo adds a note to the Sequencer's pattern at pos.
-func (this *Sequencer) RemoveFrom(pos Pos, note *lightning.Note) error {
+func (this *Sequencer) RemoveFrom(pos Pos, note int32) error {
 	return this.pattern.RemoveFrom(pos, note)
 }
 

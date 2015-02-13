@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"encoding/json"
-	// "fmt"
 	"github.com/gorilla/websocket"
 	"github.com/hypebeast/go-osc/osc"
 	"github.com/lightning/go"
@@ -55,7 +54,7 @@ func (this *simp) AddTo(pos Pos, note *lightning.Note) error {
 	return this.sequencer.AddTo(pos, note)
 }
 
-func (this *simp) RemoveFrom(pos Pos, note *lightning.Note) error {
+func (this *simp) RemoveFrom(pos Pos, note int32) error {
 	return this.sequencer.RemoveFrom(pos, note)
 }
 
@@ -70,9 +69,8 @@ func genMetroFunc(s *simp) MetroFunc {
 	}
 }
 
-// upgrade an http handler to a websocket handler.
-// that is probably not the best way to describe what is
-// happening here.
+// upgrade repeatedly calls a WebsocketHandler on each new
+// incoming message
 func (s *simp) upgrade(handler WebsocketHandler) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// upgrade http connection
@@ -190,7 +188,7 @@ func (this *simp) noteRemove() http.HandlerFunc {
 			return
 		}
 		for _, pe := range pes {
-			err := this.RemoveFrom(pe.Pos, pe.Note)
+			err := this.RemoveFrom(pe.Pos, pe.Note.Number)
 			if err != nil {
 				log.Println("could not remove note: " + err.Error())
 				return
