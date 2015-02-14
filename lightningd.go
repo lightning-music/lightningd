@@ -13,7 +13,7 @@ const (
 	// DefaultWWW is the default location of web assets for the lightning web ui
 	// see github.com/lightning/lightning/{linux,darwin}.mk
 	// for default www directories
-	DefaultWWW = "/usr/local/share/lightning"
+	DefaultWWW = "/usr/local/share/lightning/www"
 	// Default names of JACK system outputs
 	DefaultCh1 = "system:playback_1"
 	DefaultCh2 = "system:playback_2"

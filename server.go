@@ -54,7 +54,7 @@ func (this *simp) AddTo(pos Pos, note *lightning.Note) error {
 	return this.sequencer.AddTo(pos, note)
 }
 
-func (this *simp) RemoveFrom(pos Pos, note int32) error {
+func (this *simp) RemoveFrom(pos Pos, note *lightning.Note) error {
 	return this.sequencer.RemoveFrom(pos, note)
 }
 
@@ -188,7 +188,7 @@ func (this *simp) noteRemove() http.HandlerFunc {
 			return
 		}
 		for _, pe := range pes {
-			err := this.RemoveFrom(pe.Pos, pe.Note.Number)
+			err := this.RemoveFrom(pe.Pos, pe.Note)
 			if err != nil {
 				log.Println("could not remove note: " + err.Error())
 				return

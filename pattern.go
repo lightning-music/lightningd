@@ -57,14 +57,14 @@ func (this *Pattern) AddTo(pos Pos, note *lightning.Note) error {
 }
 
 // RemoveFrom removes a note from a particular position in a pattern
-func (this *Pattern) RemoveFrom(pos Pos, note int32) error {
+func (this *Pattern) RemoveFrom(pos Pos, note *lightning.Note) error {
 	if pos >= Pos(this.Length) {
 		return this.indexTooLarge(pos)
 	}
-	// remove a note with the same number, if one exists
+	// remove a note with the same sample and same number, if one exists
 	notes := this.Notes[int(pos)]
 	for i, n := range notes {
-		if n != nil && n.Number == note {
+		if n != nil && n.Number == note.Number && n.Sample == note.Sample {
 			notes[i] = nil
 		}
 	}
