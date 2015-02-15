@@ -66,7 +66,7 @@ func TestPatternRemoveFrom(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = pat.RemoveFrom(0, int32(72))
+	err = pat.RemoveFrom(0, lightning.NewNote("audio/file.flac", 72, 0))
 	if err != nil {
 		t.Fatal(err)
 	}
