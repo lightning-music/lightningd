@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"github.com/gorilla/websocket"
-	"github.com/hypebeast/go-osc/osc"
 	"github.com/lightning/go"
 	"io"
 	"log"
@@ -15,8 +14,6 @@ import (
 const (
 	PATTERN_LENGTH = 4096
 	PATTERN_DIV    = "1/4"
-	OSC_ADDR       = "127.0.0.1"
-	OSC_PORT       = 4800
 )
 
 // function that handles websocket messages
@@ -38,7 +35,6 @@ type posMessage struct {
 
 type simp struct {
 	engine    lightning.Engine
-	oscServer *osc.OscServer
 	sequencer *Sequencer
 }
 
@@ -246,7 +242,6 @@ func NewServer(webRoot string) (Server, error) {
 	// initialize server
 	srv := &simp{
 		engine,
-		osc.NewOscServer(OSC_ADDR, OSC_PORT),
 		seq,
 	}
 	// api handler
@@ -255,21 +250,6 @@ func NewServer(webRoot string) (Server, error) {
 		log.Println("could not create api: " + ea.Error())
 		return nil, ea
 	}
-	// osc server
-	pm := func(msg *osc.OscMessage) {
-		if len(msg.Arguments) != 3 {
-			log.Fatal("incorrect arguments to /sample/play (expects sii)")
-		}
-		samp := msg.Arguments[0].(string)
-		pitch := msg.Arguments[1].(int32)
-		gain := msg.Arguments[2].(int32)
-		log.Printf("Note(%s, %d, %d)\n", samp, pitch, gain)
-		note := lightning.NewNote(samp, pitch, gain)
-		srv.engine.PlayNote(note)
-	}
-	srv.oscServer.AddMsgHandler("/sample/play", pm)
-	go srv.oscServer.ListenAndDispatch()
-	log.Printf("osc server listening on port %d\n", OSC_PORT)
 	// setup handlers under default ServeMux
 	fh := http.FileServer(http.Dir(webRoot))
 	// static file server
