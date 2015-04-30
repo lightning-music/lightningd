@@ -26,7 +26,7 @@ func NewSequencer(engine lightning.Engine, patternSize int, tempo float32) *Sequ
 
 	go func() {
 		for tick := range seq.metro.Ticks() {
-			pos := uint64(tick)
+			pos := tick % uint64(seq.pattern.Length)
 			seq.PosChan <- pos
 			err := seq.PlayNotesAt(tick)
 			if err != nil {
@@ -86,6 +86,6 @@ func (this *Sequencer) Start() error {
 }
 
 // Stop playing the Sequencer's Pattern.
-func (this *Sequencer) Stop() {
-	this.metro.Stop()
+func (this *Sequencer) Stop() error {
+	return this.metro.Stop()
 }

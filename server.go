@@ -204,14 +204,11 @@ func (this *simp) patternPosition() http.HandlerFunc {
 			return
 		}
 		// get messages and call handler
-		go func() {
-			for {
-				pos := <-this.sequencer.PosChan
-				log.Printf("sending position %d\n", pos)
-				// broadcast position
-				conn.WriteJSON(posMessage{pos})
-			}
-		}()
+		for pos := range this.sequencer.PosChan {
+			log.Printf("sending position %d\n", pos)
+			// broadcast position
+			conn.WriteJSON(posMessage{pos})
+		}
 	}
 }
 
