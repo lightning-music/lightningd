@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"github.com/gorilla/websocket"
-	"github.com/lightning/go"
+	"github.com/lightning/lightning"
 	"io"
 	"log"
 	"net/http"
@@ -30,7 +30,7 @@ type Server interface {
 }
 
 type posMessage struct {
-	Position Pos `json:"position"`
+	Position uint64 `json:"position"`
 }
 
 type simp struct {
@@ -46,23 +46,12 @@ func (this *simp) Listen(addr string) error {
 	return http.ListenAndServe(addr, nil)
 }
 
-func (this *simp) AddTo(pos Pos, note *lightning.Note) error {
+func (this *simp) AddTo(pos uint64, note *lightning.Note) error {
 	return this.sequencer.AddTo(pos, note)
 }
 
-func (this *simp) RemoveFrom(pos Pos, note *lightning.Note) error {
+func (this *simp) RemoveFrom(pos uint64, note *lightning.Note) error {
 	return this.sequencer.RemoveFrom(pos, note)
-}
-
-// generate the MetroFunc that wires the metro to
-// the pattern and the audio engine
-func genMetroFunc(s *simp) MetroFunc {
-	return func(pos Pos) {
-		notes := s.sequencer.NotesAt(pos % PATTERN_LENGTH)
-		for _, note := range notes {
-			s.engine.PlayNote(note)
-		}
-	}
 }
 
 // upgrade repeatedly calls a WebsocketHandler on each new
@@ -134,6 +123,7 @@ func (this *simp) samplePlay() http.HandlerFunc {
 // generate endpoint for starting pattern
 func (this *simp) patternPlay() http.HandlerFunc {
 	return this.upgrade(func(conn *websocket.Conn, msgType int, msg []byte) {
+		log.Println("starting sequencer")
 		this.sequencer.Start()
 	})
 }
@@ -141,6 +131,7 @@ func (this *simp) patternPlay() http.HandlerFunc {
 // generate endpoint for stopping pattern
 func (this *simp) patternStop() http.HandlerFunc {
 	return this.upgrade(func(conn *websocket.Conn, msgType int, msg []byte) {
+		log.Println("stopping sequencer")
 		this.sequencer.Stop()
 	})
 }
@@ -215,9 +206,8 @@ func (this *simp) patternPosition() http.HandlerFunc {
 		// get messages and call handler
 		go func() {
 			for {
-				log.Println("waiting for PosChan message")
 				pos := <-this.sequencer.PosChan
-				log.Println("got PosChan message")
+				log.Printf("sending position %d\n", pos)
 				// broadcast position
 				conn.WriteJSON(posMessage{pos})
 			}
@@ -238,7 +228,7 @@ func NewServer(webRoot string) (Server, error) {
 		return nil, ead
 	}
 	// initialize sequencer
-	seq := NewSequencer(engine, PATTERN_LENGTH, Tempo(120), PATTERN_DIV)
+	seq := NewSequencer(engine, PATTERN_LENGTH, 120)
 	// initialize server
 	srv := &simp{
 		engine,

@@ -3,7 +3,7 @@ package main
 import (
 	"encoding/json"
 	"github.com/bmizerany/assert"
-	"github.com/lightning/go"
+	"github.com/lightning/lightning"
 	"testing"
 )
 
@@ -41,7 +41,7 @@ func TestPatternAddTo(t *testing.T) {
 	}
 	
 	// try to add a note at a pos greater than pattern size - 1
-	err = pat.AddTo(Pos(pat.Length+1), lightning.NewNote("file.wav", 59, 114))
+	err = pat.AddTo(uint64(pat.Length+1), lightning.NewNote("file.wav", 59, 114))
 	if err == nil {
 		t.Fatalf("expected err when adding note but got nil")
 	}
