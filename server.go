@@ -1,10 +1,9 @@
 package main
 
 import (
-	"bytes"
 	"encoding/json"
-	"github.com/gorilla/websocket"
 	"github.com/lightning/lightning"
+	"golang.org/x/net/websocket"
 	"io"
 	"log"
 	"net/http"
@@ -16,12 +15,14 @@ const (
 	PATTERN_DIV    = "1/4"
 )
 
-// function that handles websocket messages
-type WebsocketHandler func(conn *websocket.Conn, messageType int, msg []byte)
-
 type Response struct {
 	Status  string `json:"status"`
 	Message string `json:"message"`
+}
+
+func (self *Response) WriteJSON(w io.Writer) error {
+	enc := json.NewEncoder(w)
+	return enc.Encode(self)
 }
 
 type Server interface {
@@ -31,6 +32,11 @@ type Server interface {
 
 type posMessage struct {
 	Position uint64 `json:"position"`
+}
+
+func (self posMessage) WriteJSON(w io.Writer) error {
+	enc := json.NewEncoder(w)
+	return enc.Encode(self)
 }
 
 type simp struct {
@@ -54,160 +60,129 @@ func (this *simp) RemoveFrom(pos uint64, note *lightning.Note) error {
 	return this.sequencer.RemoveFrom(pos, note)
 }
 
-// upgrade repeatedly calls a WebsocketHandler on each new
-// incoming message
-func (s *simp) upgrade(handler WebsocketHandler) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		// upgrade http connection
-		var upgrader = websocket.Upgrader{
-			ReadBufferSize:  1024,
-			WriteBufferSize: 1024,
-		}
-		conn, err := upgrader.Upgrade(w, r, nil)
-		if err != nil {
-			log.Println("could not upgrade http conn to ws: " + err.Error())
-			return
-		}
-		// get messages and call handler
+// samplePlay exposes a websocket endpoint for playing a sample
+func (this *simp) samplePlay() websocket.Handler {
+	return func(conn *websocket.Conn) {
 		for {
-			msgType, bs, err := conn.ReadMessage()
-
-			if err != nil {
-				if err == io.EOF {
-					// if err is io.EOF, then it is likely the client
-					// has closed the connection, in which case we should
-					// close the connection on our end and start listening
-					// for a new one.
-					break
-				} else {
-					log.Fatal("could not read ws message: " + err.Error())
-				}
+			var res Response
+			note, re := lightning.ReadNote(conn)
+			if re != nil {
+				panic(re)
 			}
-
-			handler(conn, msgType, bs)
+			ep := this.engine.PlayNote(note)
+			if ep != nil {
+				panic(ep)
+			}
+			res = Response{"ok", "played " + note.Sample}
+			ew := res.WriteJSON(conn)
+			if ew != nil {
+				panic(ew)
+			}
 		}
 	}
 }
 
-func (this *simp) samplePlay() http.HandlerFunc {
-	return this.upgrade(func(conn *websocket.Conn, msgType int, msg []byte) {
-		var res Response
-		note, decerr := lightning.DecodeNote(msg)
-		if decerr != nil && len(msg) > 0 {
-			fmtstr := "could not parse note from %s: %s\n"
-			log.Printf(fmtstr, bytes.NewBuffer(msg).String(), decerr.Error())
-			return
+// patternPlay generates an endpoint for starting pattern
+func (this *simp) patternPlay() websocket.Handler {
+	return func(conn *websocket.Conn) {
+		msg := make([]byte, 0)
+		for {
+			_, err := conn.Read(msg)
+			if err != nil {
+				panic(err)
+			}
+			log.Println("starting sequencer")
+			this.sequencer.Start()
 		}
-
-		// log.Printf("playing %v\n", bytes.NewBuffer(msg).String())
-		// note.Sample(), note.Number(), note.Velocity())
-
-		ep := this.engine.PlayNote(note)
-		if ep != nil {
-			log.Println("could not play note: " + ep.Error())
-			return
-		}
-		res = Response{"ok", "played " + note.Sample}
-		resb, em := json.Marshal(res)
-		if em != nil {
-			log.Println("could not marshal response: " + em.Error())
-			return
-		}
-		ew := conn.WriteMessage(msgType, resb)
-		if ew != nil {
-			log.Println("could not write ws message: " + ew.Error())
-		}
-	})
-}
-
-// generate endpoint for starting pattern
-func (this *simp) patternPlay() http.HandlerFunc {
-	return this.upgrade(func(conn *websocket.Conn, msgType int, msg []byte) {
-		log.Println("starting sequencer")
-		this.sequencer.Start()
-	})
+	}
 }
 
 // generate endpoint for stopping pattern
-func (this *simp) patternStop() http.HandlerFunc {
-	return this.upgrade(func(conn *websocket.Conn, msgType int, msg []byte) {
-		log.Println("stopping sequencer")
-		this.sequencer.Stop()
-	})
+func (this *simp) patternStop() websocket.Handler {
+	return func(conn *websocket.Conn) {
+		msg := make([]byte, 0)
+		for {
+			_, err := conn.Read(msg)
+			if err != nil {
+				panic(err)
+			}
+			log.Println("stopping sequencer")
+			this.sequencer.Stop()
+		}
+	}
 }
 
 // generate endpoint for adding notes to a pattern
-func (this *simp) noteAdd() http.HandlerFunc {
-	return this.upgrade(func(conn *websocket.Conn, msgType int, msg []byte) {
-		var res Response
-		pes := make([]PatternEdit, 0)
-		eum := json.Unmarshal(msg, &pes)
-		if eum != nil && len(msg) > 0 {
-			log.Println("could not unmarshal request body: " + eum.Error())
-			log.Printf("request body: %s\n", bytes.NewBuffer(msg).String())
-			return
-		}
-		for _, pe := range pes {
-			err := this.AddTo(pe.Pos, pe.Note)
+func (this *simp) noteAdd() websocket.Handler {
+	return func(conn *websocket.Conn) {
+		msg := make([]byte, 0)
+		for {
+			var res Response
+			_, err := conn.Read(msg)
 			if err != nil {
-				log.Println("could not add note: " + err.Error())
-				return
+				panic(err)
+			}
+			pes, er := ReadPatternEdits(conn)
+			if er != nil {
+				panic(er)
+			}
+			for _, pe := range pes {
+				err := this.AddTo(pe.Pos, pe.Note)
+				if err != nil {
+					log.Println("could not add note: " + err.Error())
+					return
+				}
+			}
+			res = Response{"ok", "note added"}
+			ew := res.WriteJSON(conn)
+			if ew != nil {
+				panic(ew)
 			}
 		}
-		res = Response{"ok", "note added"}
-		resb, ee := json.Marshal(res)
-		if ee != nil {
-			log.Println("could not encode response: " + ee.Error())
-		}
-		conn.WriteMessage(msgType, resb)
-	})
+	}
 }
 
 // generate endpoint for removing notes from a pattern
-func (this *simp) noteRemove() http.HandlerFunc {
-	return this.upgrade(func(conn *websocket.Conn, msgType int, msg []byte) {
-		var res Response
-		pes := make([]PatternEdit, 0)
-		eum := json.Unmarshal(msg, &pes)
-		if eum != nil && len(msg) > 0 {
-			log.Println("could not unmarshal request body: " + eum.Error())
-			log.Printf("request body: %s\n", bytes.NewBuffer(msg).String())
-			return
-		}
-		for _, pe := range pes {
-			err := this.RemoveFrom(pe.Pos, pe.Note)
+func (this *simp) noteRemove() websocket.Handler {
+	return func(conn *websocket.Conn) {
+		msg := make([]byte, 0)
+		for {
+			_, err := conn.Read(msg)
 			if err != nil {
-				log.Println("could not remove note: " + err.Error())
-				return
+				panic(err)
+			}
+			var res Response
+			pes, er := ReadPatternEdits(conn)
+			if er != nil {
+				panic(er)
+			}
+			for _, pe := range pes {
+				err = this.RemoveFrom(pe.Pos, pe.Note)
+				if err != nil {
+					log.Println("could not remove note: " + err.Error())
+					return
+				}
+			}
+			res = Response{"ok", "note removed"}
+			ew := res.WriteJSON(conn)
+			if ew != nil {
+				panic(ew)
 			}
 		}
-		res = Response{"ok", "note removed"}
-		resb, ee := json.Marshal(res)
-		if ee != nil {
-			log.Println("could not encode response: " + ee.Error())
-		}
-		conn.WriteMessage(msgType, resb)
-	})
+	}
 }
 
 // generate endpoint for sending pattern position
-func (this *simp) patternPosition() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		// upgrade http connection
-		var upgrader = websocket.Upgrader{
-			ReadBufferSize:  1024,
-			WriteBufferSize: 1024,
-		}
-		conn, err := upgrader.Upgrade(w, r, nil)
-		if err != nil {
-			log.Println("could not upgrade http conn to ws: " + err.Error())
-			return
-		}
+func (this *simp) patternPosition() websocket.Handler {
+	return func(conn *websocket.Conn) {
 		// get messages and call handler
 		for pos := range this.sequencer.PosChan {
 			log.Printf("sending position %d\n", pos)
 			// broadcast position
-			conn.WriteJSON(posMessage{pos})
+			err := posMessage{pos}.WriteJSON(conn)
+			if err != nil {
+				panic(err)
+			}
 		}
 	}
 }
@@ -239,16 +214,18 @@ func NewServer(webRoot string) (Server, error) {
 	}
 	// setup handlers under default ServeMux
 	fh := http.FileServer(http.Dir(webRoot))
+	log.Println("setting up api endpoints")
 	// static file server
 	http.Handle("/", fh)
 	// ReST endpoints
 	http.HandleFunc("/samples", api.ListSamples())
 	// websocket endpoints
 	http.Handle("/sample/play", srv.samplePlay())
-	http.HandleFunc("/note/add", srv.noteAdd())
-	http.HandleFunc("/note/remove", srv.noteRemove())
-	http.HandleFunc("/pattern/play", srv.patternPlay())
-	http.HandleFunc("/pattern/stop", srv.patternStop())
-	http.HandleFunc("/pattern/position", srv.patternPosition())
+	http.Handle("/note/add", srv.noteAdd())
+	http.Handle("/note/remove", srv.noteRemove())
+	http.Handle("/pattern/play", srv.patternPlay())
+	http.Handle("/pattern/stop", srv.patternStop())
+	http.Handle("/pattern/position", srv.patternPosition())
+	log.Println("done setting up api endpoints")
 	return srv, nil
 }

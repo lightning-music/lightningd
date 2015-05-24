@@ -1,8 +1,10 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"github.com/lightning/lightning"
+	"io"
 )
 
 // Pattern defines a pattern of notes.
@@ -11,11 +13,6 @@ import (
 type Pattern struct {
 	Length int                 `json:"length"`
 	Notes  [][]*lightning.Note `json:"notes"`
-}
-
-type PatternEdit struct {
-	Pos  uint64             `json:"pos"`
-	Note *lightning.Note `json:"note"`
 }
 
 func (this *Pattern) indexTooLarge(pos uint64) error {
@@ -84,4 +81,33 @@ func NewPattern(size int) *Pattern {
 		size,
 		make([][]*lightning.Note, size),
 	}
+}
+
+// PatternEdit represents a single edit operation on a pattern
+type PatternEdit struct {
+	Pos  uint64          `json:"pos"`
+	Note *lightning.Note `json:"note"`
+}
+
+func (self *PatternEdit) WriteJSON(w io.Writer) error {
+	enc := json.NewEncoder(w)
+	return enc.Encode(self)
+}
+
+func ReadPatternEdit(r io.Reader) (*PatternEdit, error) {
+	dec, pe := json.NewDecoder(r), new(PatternEdit)
+	ed := dec.Decode(pe)
+	if ed != nil {
+		return nil, ed
+	}
+	return pe, nil
+}
+
+func ReadPatternEdits(r io.Reader) ([]PatternEdit, error) {
+	dec, pes := json.NewDecoder(r), make([]PatternEdit, 0)
+	ed := dec.Decode(pes)
+	if ed != nil {
+		return nil, ed
+	}
+	return pes, nil
 }
