@@ -2,10 +2,6 @@
 
 websocket-controlled music sequencer for lightning
 
-# status
-
-[![Build Status](https://drone.io/github.com/lightning/lightningd/status.png)](https://drone.io/github.com/lightning/lightningd/latest)
-
 # build
 
 Prerequisites:
