@@ -26,7 +26,7 @@ func main() {
 	ch2 := flag.String("ch2", DefaultCh2, "right channel JACK sink")
 	// parse cli flags
 	flag.Parse()
-	server, err := NewServer(*www)
+	server, err := newServer(*www)
 	if err != nil {
 		log.Fatal("could not create server: " + err.Error())
 	}

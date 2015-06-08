@@ -5,7 +5,7 @@ import "testing"
 
 func TestSequencer(t *testing.T) {
 	engine := lightning.NewEngine()
-	seq := NewSequencer(engine, 128, 480)
+	seq := newSequencer(engine, 128, 480)
 
 	err := seq.Start()
 	if err != nil {

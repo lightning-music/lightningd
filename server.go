@@ -7,12 +7,12 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"path"
 )
 
 const (
-	PATTERN_LENGTH = 4096
-	PATTERN_DIV    = "1/4"
+	// our pattern has 16384 sixteenth notes,
+	// which means we have 1024 bars available.
+	patternLength = 4096
 )
 
 type Response struct {
@@ -25,11 +25,6 @@ func (self *Response) WriteJSON(w io.Writer) error {
 	return enc.Encode(self)
 }
 
-type Server interface {
-	Connect(ch1 string, ch2 string) error
-	Listen(addr string) error
-}
-
 type posMessage struct {
 	Position uint64 `json:"position"`
 }
@@ -39,29 +34,29 @@ func (self posMessage) WriteJSON(w io.Writer) error {
 	return enc.Encode(self)
 }
 
-type simp struct {
-	engine    lightning.Engine
-	sequencer *Sequencer
+type server struct {
+	engine lightning.Engine
+	seq    *sequencer
 }
 
-func (this *simp) Connect(ch1 string, ch2 string) error {
-	return this.engine.Connect(ch1, ch2)
+func (self *server) Connect(ch1 string, ch2 string) error {
+	return self.engine.Connect(ch1, ch2)
 }
 
-func (this *simp) Listen(addr string) error {
+func (self *server) Listen(addr string) error {
 	return http.ListenAndServe(addr, nil)
 }
 
-func (this *simp) AddTo(pos uint64, note *lightning.Note) error {
-	return this.sequencer.AddTo(pos, note)
+func (self *server) AddTo(pos uint64, note *lightning.Note) error {
+	return self.seq.AddTo(pos, note)
 }
 
-func (this *simp) RemoveFrom(pos uint64, note *lightning.Note) error {
-	return this.sequencer.RemoveFrom(pos, note)
+func (self *server) RemoveFrom(pos uint64, note *lightning.Note) error {
+	return self.seq.RemoveFrom(pos, note)
 }
 
 // samplePlay exposes a websocket endpoint for playing a sample
-func (this *simp) samplePlay() websocket.Handler {
+func (self *server) samplePlay() websocket.Handler {
 	return func(conn *websocket.Conn) {
 		for {
 			var res Response
@@ -69,7 +64,7 @@ func (this *simp) samplePlay() websocket.Handler {
 			if re != nil {
 				panic(re)
 			}
-			ep := this.engine.PlayNote(note)
+			ep := self.engine.PlayNote(note)
 			if ep != nil {
 				panic(ep)
 			}
@@ -83,7 +78,7 @@ func (this *simp) samplePlay() websocket.Handler {
 }
 
 // patternPlay generates an endpoint for starting pattern
-func (this *simp) patternPlay() websocket.Handler {
+func (self *server) patternPlay() websocket.Handler {
 	return func(conn *websocket.Conn) {
 		msg := make([]byte, 0)
 		for {
@@ -92,13 +87,13 @@ func (this *simp) patternPlay() websocket.Handler {
 				panic(err)
 			}
 			log.Println("starting sequencer")
-			this.sequencer.Start()
+			self.seq.Start()
 		}
 	}
 }
 
 // generate endpoint for stopping pattern
-func (this *simp) patternStop() websocket.Handler {
+func (self *server) patternStop() websocket.Handler {
 	return func(conn *websocket.Conn) {
 		msg := make([]byte, 0)
 		for {
@@ -107,13 +102,13 @@ func (this *simp) patternStop() websocket.Handler {
 				panic(err)
 			}
 			log.Println("stopping sequencer")
-			this.sequencer.Stop()
+			self.seq.Stop()
 		}
 	}
 }
 
 // generate endpoint for adding notes to a pattern
-func (this *simp) noteAdd() websocket.Handler {
+func (self *server) noteAdd() websocket.Handler {
 	return func(conn *websocket.Conn) {
 		msg := make([]byte, 0)
 		for {
@@ -127,7 +122,7 @@ func (this *simp) noteAdd() websocket.Handler {
 				panic(er)
 			}
 			for _, pe := range pes {
-				err := this.AddTo(pe.Pos, pe.Note)
+				err := self.AddTo(pe.Pos, pe.Note)
 				if err != nil {
 					log.Println("could not add note: " + err.Error())
 					return
@@ -143,7 +138,7 @@ func (this *simp) noteAdd() websocket.Handler {
 }
 
 // generate endpoint for removing notes from a pattern
-func (this *simp) noteRemove() websocket.Handler {
+func (self *server) noteRemove() websocket.Handler {
 	return func(conn *websocket.Conn) {
 		msg := make([]byte, 0)
 		for {
@@ -157,7 +152,7 @@ func (this *simp) noteRemove() websocket.Handler {
 				panic(er)
 			}
 			for _, pe := range pes {
-				err = this.RemoveFrom(pe.Pos, pe.Note)
+				err = self.RemoveFrom(pe.Pos, pe.Note)
 				if err != nil {
 					log.Println("could not remove note: " + err.Error())
 					return
@@ -172,12 +167,11 @@ func (this *simp) noteRemove() websocket.Handler {
 	}
 }
 
-// generate endpoint for sending pattern position
-func (this *simp) patternPosition() websocket.Handler {
+// patternPosition generate endpoint for sending pattern position
+func (self *server) patternPosition() websocket.Handler {
 	return func(conn *websocket.Conn) {
 		// get messages and call handler
-		for pos := range this.sequencer.PosChan {
-			log.Printf("sending position %d\n", pos)
+		for pos := range self.seq.PosChan {
 			// broadcast position
 			err := posMessage{pos}.WriteJSON(conn)
 			if err != nil {
@@ -187,45 +181,33 @@ func (this *simp) patternPosition() websocket.Handler {
 	}
 }
 
-func NewServer(webRoot string) (Server, error) {
-	// our pattern has 16384 sixteenth notes,
-	// which means we have 1024 bars available
+// close closes the audio engine
+func (self *server) close() {
+	self.engine.Close()
+}
+
+// newServer creates a websocket/rest server that manages the bulk
+// of lightningd functionality
+func newServer(www string) (*server, error) {
+	srv := new(server)
+	srv.engine = lightning.NewEngine()
 	// initialize tempo to 120 bpm (a typical
 	// starting point for sequencers)
-	engine := lightning.NewEngine()
-	// add audio root to dir search list
-	audioRoot := path.Join(webRoot, "assets/audio")
-	ead := engine.AddDir(audioRoot)
-	if ead != nil {
-		return nil, ead
-	}
-	// initialize sequencer
-	seq := NewSequencer(engine, PATTERN_LENGTH, 120)
-	// initialize server
-	srv := &simp{
-		engine,
-		seq,
-	}
-	// api handler
-	api, ea := NewApi(audioRoot)
-	if ea != nil {
-		log.Println("could not create api: " + ea.Error())
-		return nil, ea
-	}
+	srv.seq = newSequencer(srv.engine, patternLength, 120)
+	// initialize samples
+	samples := newSamples(srv.engine)
 	// setup handlers under default ServeMux
-	fh := http.FileServer(http.Dir(webRoot))
-	log.Println("setting up api endpoints")
+	fileServer := http.FileServer(http.Dir(www))
 	// static file server
-	http.Handle("/", fh)
-	// ReST endpoints
-	http.HandleFunc("/samples", api.ListSamples())
+	http.Handle("/", fileServer)
+	// rest endpoints
+	http.HandleFunc("/samples", samples.list())
 	// websocket endpoints
-	http.Handle("/sample/play", srv.samplePlay())
+	http.Handle("/sample/play", samples.play())
 	http.Handle("/note/add", srv.noteAdd())
 	http.Handle("/note/remove", srv.noteRemove())
 	http.Handle("/pattern/play", srv.patternPlay())
 	http.Handle("/pattern/stop", srv.patternStop())
 	http.Handle("/pattern/position", srv.patternPosition())
-	log.Println("done setting up api endpoints")
 	return srv, nil
 }
