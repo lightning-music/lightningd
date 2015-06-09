@@ -1,8 +1,11 @@
 package main
 
-import "fmt"
-import "golang.org/x/net/websocket"
-import "io"
+import (
+	"encoding/json"
+	"fmt"
+	"golang.org/x/net/websocket"
+	"io"
+)
 
 type client struct {
 	PatternPosition chan uint64
@@ -30,15 +33,22 @@ func (self *client) receivePosition(origin, host string, port int, cher chan err
 		return
 	}
 	cher <-nil
+	var pos uint64
+	msg := make([]byte, 8)
 	for {
-		posMsg, err := readPosMessage(conn)
+		bytesRead, err := conn.Read(msg)
 		if err == io.EOF {
 			continue
 		}
 		if err != nil {
 			panic(err)
 		}
-		self.PatternPosition <- posMsg.Position
+		err = json.Unmarshal(msg[:bytesRead], &pos)
+		if err != nil {
+			panic(err)
+		}
+		fmt.Printf("received pos %v\n", pos)
+		self.PatternPosition <-pos
 	}
 }
 

@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"github.com/lightning/lightning"
 	"golang.org/x/net/websocket"
 	"io"
@@ -20,25 +21,6 @@ type Response struct {
 }
 
 func (self *Response) writeJSON(w io.Writer) error {
-	enc := json.NewEncoder(w)
-	return enc.Encode(self)
-}
-
-type posMessage struct {
-	Position uint64 `json:"position"`
-}
-
-func readPosMessage(r io.Reader) (*posMessage, error) {
-	dec := json.NewDecoder(r)
-	posMsg := new(posMessage)
-	err := dec.Decode(posMsg)
-	if err != nil {
-		return nil, err
-	}
-	return posMsg, nil
-}
-
-func (self posMessage) writeJSON(w io.Writer) error {
 	enc := json.NewEncoder(w)
 	return enc.Encode(self)
 }
@@ -181,15 +163,22 @@ func (self *server) noteRemove() websocket.Handler {
 	}
 }
 
-// patternPosition generate endpoint for sending pattern position
+// patternPosition generates a websocket endpoint for sending
+// pattern position
 func (self *server) patternPosition() websocket.Handler {
-	var err error
 	return func(conn *websocket.Conn) {
 		for pos := range self.seq.PosChan {
 			// broadcast position
-			err = posMessage{pos}.writeJSON(conn)
+			msg, err := json.Marshal(pos)
 			if err != nil {
 				panic(err)
+			}
+			bytesWritten, err := conn.Write(msg)
+			if err != nil {
+				panic(err)
+			}
+			if bytesWritten != len(msg) {
+				panic(fmt.Errorf("wrote %d out of %d bytes", bytesWritten, len(msg)))
 			}
 		}
 	}
