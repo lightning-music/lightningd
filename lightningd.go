@@ -5,6 +5,7 @@ import (
 	"flag"
 	"io/ioutil"
 	"log"
+	"path"
 )
 
 const (
@@ -33,10 +34,13 @@ func main() {
 	log.Printf("serving static content from %s\n", *www)
 	log.Printf("binding to %s\n", *bind)
 	log.Printf("connecting audio output1 to %s and output2 to %s\n", *ch1, *ch2)
-	server.Connect(*ch1, *ch2)
-	server.Listen(*bind)
-
-	/* setup a pattern from a chunk of json */
+	err = server.readSamples(path.Join(*www, "assets", "audio"))
+	if err != nil {
+		log.Fatal(err)
+	}
+	server.connect(*ch1, *ch2)
+	server.listen(*bind)
+	// setup a pattern from a chunk of json
 	pat := NewPattern(0)
 	content, err := ioutil.ReadFile("pat.json")
 	if err != nil {

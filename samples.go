@@ -3,15 +3,15 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"github.com/lightning/lightning"
+	"golang.org/x/net/websocket"
 	"io"
 	"net/http"
 	"os"
+	"path"
 	"strings"
 )
-
-// supportedExtensions is a whitelist of file extensions that we support
-var supportedExtensions = []string{".wav", ".flac", ".aif", ".aiff"}
 
 // samples manages the sample pool
 type samples struct {
@@ -19,6 +19,21 @@ type samples struct {
 	engine lightning.Engine
 	// pool is a map from name => path
 	pool map[string]string
+}
+
+// response is a response object in the websocket API
+type response struct {
+	success bool   `json:"success"`
+	message string `json:"message,omitempty"`
+}
+
+// writeJSON writes a response as JSON to an io.Writer
+func (self response) writeJSON(w io.Writer) {
+	enc := json.NewEncoder(w)
+	err := enc.Encode(self)
+	if err != nil {
+		w.Write([]byte("Could not write response"))
+	}
 }
 
 // writeJSON writes samples in json format to an io.Writer
@@ -41,33 +56,41 @@ func (self *samples) list() http.HandlerFunc {
 		if err != nil {
 			// assume status code is not already sent
 			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(err.Error()))
 		}
 	}
 }
 
 // play returns an http handler that plays a sample
-func (self *samples) play() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		note, err := lightning.ReadNote(r.Body)
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-		if samplePath, exists := self.pool[note.Sample]; !exists {
-			w.WriteHeader(http.StatusNotFound)
-			return
-		} else {
-			note.Sample = samplePath
-		}
-		err = self.engine.PlayNote(note)
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
+func (self *samples) play() websocket.Handler {
+	return func(conn *websocket.Conn) {
+		for {
+			note, err := lightning.ReadNote(conn)
+			if err == io.EOF {
+				continue
+			}
+			if err != nil {
+				response{false, err.Error()}.writeJSON(conn)
+				return
+			}
+			if samplePath, exists := self.pool[note.Sample]; !exists {
+				msg := fmt.Sprintf("sample %s does not exist", samplePath)
+				response{false, msg}.writeJSON(conn)
+				return
+			} else {
+				note.Sample = samplePath
+			}
+			err = self.engine.PlayNote(note)
+			if err != nil {
+				response{false, err.Error()}.writeJSON(conn)
+			}
+			response{true, "played " + note.Sample}.writeJSON(conn)
 		}
 	}
 }
 
-// addDir reads samples from a directory
-func (self *samples) addDir(dir string) error {
+// readSamples reads samples from a directory
+func (self *samples) readSamples(dir string) error {
 	fh, eo := os.Open(dir)
 	if eo != nil {
 		return eo
@@ -84,10 +107,10 @@ func (self *samples) addDir(dir string) error {
 	if er == io.EOF {
 		return errors.New("no samples in " + dir)
 	}
-	var samples []string
 	for _, f := range fs {
-		if isSupported(f, supportedExtensions) {
-			samples = append(samples, f.Name())
+		if isSupported(f.Name()) {
+			name := getName(f.Name())
+			self.pool[name] = path.Join(dir, f.Name())
 		}
 	}
 	return nil
@@ -98,13 +121,23 @@ func newSamples(engine lightning.Engine) *samples {
 	return &samples{engine, make(map[string]string, 0)}
 }
 
+// supportedExtensions is a whitelist of file extensions that we support
+var supportedExtensions = []string{".wav", ".flac", ".aif", ".aiff"}
+
 // determine if a file has a supported extension
-func isSupported(f os.FileInfo, exts []string) bool {
-	is := false
-	for _, ext := range exts {
-		if strings.HasSuffix(f.Name(), ext) {
-			is = true
+func isSupported(f string) bool {
+	for _, ext := range supportedExtensions {
+		if strings.HasSuffix(f, ext) {
+			return true
 		}
 	}
-	return is
+	return false
+}
+
+// getName gets the sample name from the path to the
+// sample file. The sample name is the base name stripped of
+// the file extension.
+func getName(f string) string {
+	base := path.Base(f)
+	return base[0:strings.LastIndex(base, ".")]
 }

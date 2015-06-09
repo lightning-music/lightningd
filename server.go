@@ -5,7 +5,6 @@ import (
 	"github.com/lightning/lightning"
 	"golang.org/x/net/websocket"
 	"io"
-	"log"
 	"net/http"
 )
 
@@ -20,7 +19,7 @@ type Response struct {
 	Message string `json:"message"`
 }
 
-func (self *Response) WriteJSON(w io.Writer) error {
+func (self *Response) writeJSON(w io.Writer) error {
 	enc := json.NewEncoder(w)
 	return enc.Encode(self)
 }
@@ -29,30 +28,37 @@ type posMessage struct {
 	Position uint64 `json:"position"`
 }
 
-func (self posMessage) WriteJSON(w io.Writer) error {
+func readPosMessage(r io.Reader) (*posMessage, error) {
+	dec := json.NewDecoder(r)
+	posMsg := new(posMessage)
+	err := dec.Decode(posMsg)
+	if err != nil {
+		return nil, err
+	}
+	return posMsg, nil
+}
+
+func (self posMessage) writeJSON(w io.Writer) error {
 	enc := json.NewEncoder(w)
 	return enc.Encode(self)
 }
 
 type server struct {
-	engine lightning.Engine
-	seq    *sequencer
+	engine  lightning.Engine
+	seq     *sequencer
+	samples *samples
 }
 
-func (self *server) Connect(ch1 string, ch2 string) error {
+func (self *server) connect(ch1 string, ch2 string) error {
 	return self.engine.Connect(ch1, ch2)
 }
 
-func (self *server) Listen(addr string) error {
+func (self *server) listen(addr string) error {
 	return http.ListenAndServe(addr, nil)
 }
 
-func (self *server) AddTo(pos uint64, note *lightning.Note) error {
-	return self.seq.AddTo(pos, note)
-}
-
-func (self *server) RemoveFrom(pos uint64, note *lightning.Note) error {
-	return self.seq.RemoveFrom(pos, note)
+func (self *server) readSamples(dir string) error {
+	return self.samples.readSamples(dir)
 }
 
 // samplePlay exposes a websocket endpoint for playing a sample
@@ -69,7 +75,7 @@ func (self *server) samplePlay() websocket.Handler {
 				panic(ep)
 			}
 			res = Response{"ok", "played " + note.Sample}
-			ew := res.WriteJSON(conn)
+			ew := res.writeJSON(conn)
 			if ew != nil {
 				panic(ew)
 			}
@@ -80,13 +86,15 @@ func (self *server) samplePlay() websocket.Handler {
 // patternPlay generates an endpoint for starting pattern
 func (self *server) patternPlay() websocket.Handler {
 	return func(conn *websocket.Conn) {
-		msg := make([]byte, 0)
+		msg := make([]byte, 4)
 		for {
 			_, err := conn.Read(msg)
+			if err == io.EOF {
+				continue
+			}
 			if err != nil {
 				panic(err)
 			}
-			log.Println("starting sequencer")
 			self.seq.Start()
 		}
 	}
@@ -95,13 +103,15 @@ func (self *server) patternPlay() websocket.Handler {
 // generate endpoint for stopping pattern
 func (self *server) patternStop() websocket.Handler {
 	return func(conn *websocket.Conn) {
-		msg := make([]byte, 0)
+		msg := make([]byte, 4)
 		for {
 			_, err := conn.Read(msg)
+			if err == io.EOF {
+				continue
+			}
 			if err != nil {
 				panic(err)
 			}
-			log.Println("stopping sequencer")
 			self.seq.Stop()
 		}
 	}
@@ -114,6 +124,9 @@ func (self *server) noteAdd() websocket.Handler {
 		for {
 			var res Response
 			_, err := conn.Read(msg)
+			if err == io.EOF {
+				continue
+			}
 			if err != nil {
 				panic(err)
 			}
@@ -122,14 +135,13 @@ func (self *server) noteAdd() websocket.Handler {
 				panic(er)
 			}
 			for _, pe := range pes {
-				err := self.AddTo(pe.Pos, pe.Note)
+				err := self.seq.AddTo(pe.Pos, pe.Note)
 				if err != nil {
-					log.Println("could not add note: " + err.Error())
-					return
+					panic(err)
 				}
 			}
 			res = Response{"ok", "note added"}
-			ew := res.WriteJSON(conn)
+			ew := res.writeJSON(conn)
 			if ew != nil {
 				panic(ew)
 			}
@@ -143,6 +155,9 @@ func (self *server) noteRemove() websocket.Handler {
 		msg := make([]byte, 0)
 		for {
 			_, err := conn.Read(msg)
+			if err == io.EOF {
+				continue
+			}
 			if err != nil {
 				panic(err)
 			}
@@ -152,14 +167,13 @@ func (self *server) noteRemove() websocket.Handler {
 				panic(er)
 			}
 			for _, pe := range pes {
-				err = self.RemoveFrom(pe.Pos, pe.Note)
+				err = self.seq.RemoveFrom(pe.Pos, pe.Note)
 				if err != nil {
-					log.Println("could not remove note: " + err.Error())
-					return
+					panic(err)
 				}
 			}
 			res = Response{"ok", "note removed"}
-			ew := res.WriteJSON(conn)
+			ew := res.writeJSON(conn)
 			if ew != nil {
 				panic(ew)
 			}
@@ -169,11 +183,11 @@ func (self *server) noteRemove() websocket.Handler {
 
 // patternPosition generate endpoint for sending pattern position
 func (self *server) patternPosition() websocket.Handler {
+	var err error
 	return func(conn *websocket.Conn) {
-		// get messages and call handler
 		for pos := range self.seq.PosChan {
 			// broadcast position
-			err := posMessage{pos}.WriteJSON(conn)
+			err = posMessage{pos}.writeJSON(conn)
 			if err != nil {
 				panic(err)
 			}
@@ -195,15 +209,15 @@ func newServer(www string) (*server, error) {
 	// starting point for sequencers)
 	srv.seq = newSequencer(srv.engine, patternLength, 120)
 	// initialize samples
-	samples := newSamples(srv.engine)
+	srv.samples = newSamples(srv.engine)
 	// setup handlers under default ServeMux
 	fileServer := http.FileServer(http.Dir(www))
 	// static file server
 	http.Handle("/", fileServer)
 	// rest endpoints
-	http.HandleFunc("/samples", samples.list())
+	http.HandleFunc("/samples", srv.samples.list())
 	// websocket endpoints
-	http.Handle("/sample/play", samples.play())
+	http.Handle("/sample/play", srv.samples.play())
 	http.Handle("/note/add", srv.noteAdd())
 	http.Handle("/note/remove", srv.noteRemove())
 	http.Handle("/pattern/play", srv.patternPlay())
