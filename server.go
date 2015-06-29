@@ -7,12 +7,15 @@ import (
 	"golang.org/x/net/websocket"
 	"io"
 	"net/http"
+	"strconv"
 )
 
 const (
 	// our pattern has 16384 sixteenth notes,
 	// which means we have 1024 bars available.
-	patternLength = 4096
+	patternLength  = 4096
+	sequencerStop  = 0
+	sequencerStart = 1
 )
 
 type Response struct {
@@ -65,123 +68,68 @@ func (self *server) samplePlay() websocket.Handler {
 	}
 }
 
-// patternPlay generates an endpoint for starting pattern
-func (self *server) patternPlay() websocket.Handler {
-	return func(conn *websocket.Conn) {
-		msg := make([]byte, 4)
-		for {
-			_, err := conn.Read(msg)
-			if err == io.EOF {
-				continue
-			}
-			if err != nil {
-				panic(err)
-			}
-			self.seq.Start()
+// readMessages reads messages for the websocket endpoint
+// and sends them on a channel. errors are sent on the provided error
+// channel. if an error occurs, the method returns
+func (self *server) readMessages(conn *websocket.Conn, c chan interface{}, e chan error) {
+	var msg interface{}
+	dec := json.NewDecoder(conn)
+	for err := dec.Decode(&msg); true; err = dec.Decode(&msg) {
+		if err != nil {
+			e <-err
+			break
 		}
+		c <-msg
 	}
 }
 
-// generate endpoint for stopping pattern
-func (self *server) patternStop() websocket.Handler {
-	return func(conn *websocket.Conn) {
-		msg := make([]byte, 4)
-		for {
-			_, err := conn.Read(msg)
+// sequencerEndpoint creates a websocket handler for the /sequencer endpoint
+func (self *server) sequencerEndpoint(conn *websocket.Conn) {
+	var err error
+	mc := make(chan interface{})
+	ec := make(chan error)
+	go self.readMessages(conn, mc, ec)
+	for {
+		select {
+		case err := <-ec:
 			if err == io.EOF {
-				continue
+				// the client closed the connection
+				goto CloseConnection
 			}
 			if err != nil {
 				panic(err)
 			}
-			self.seq.Stop()
-		}
-	}
-}
-
-// generate endpoint for adding notes to a pattern
-func (self *server) noteAdd() websocket.Handler {
-	return func(conn *websocket.Conn) {
-		msg := make([]byte, 0)
-		for {
-			var res Response
-			_, err := conn.Read(msg)
-			if err == io.EOF {
-				continue
-			}
-			if err != nil {
-				panic(err)
-			}
-			pes, er := ReadPatternEdits(conn)
-			if er != nil {
-				panic(er)
-			}
-			for _, pe := range pes {
-				err := self.seq.AddTo(pe.Pos, pe.Note)
-				if err != nil {
-					panic(err)
+		case msg := <-mc:
+			if s, isString := msg.(string); isString {
+				// start or stop
+				if s == "start" {
+					err = self.seq.Start()
+					if err != nil {
+						panic(err)
+					}
+				} else if s == "stop" {
+					err = self.seq.Stop()
+					if err != nil {
+						panic(err)
+					}
+				} else {
+					panic(fmt.Errorf("unrecognized sequencer command %s", s))
 				}
+			} else if f, isFloat := msg.(float64); isFloat {
+				// tempo
+				self.seq.SetTempo(float32(f))
 			}
-			res = Response{"ok", "note added"}
-			ew := res.writeJSON(conn)
-			if ew != nil {
-				panic(ew)
-			}
-		}
-	}
-}
-
-// generate endpoint for removing notes from a pattern
-func (self *server) noteRemove() websocket.Handler {
-	return func(conn *websocket.Conn) {
-		msg := make([]byte, 0)
-		for {
-			_, err := conn.Read(msg)
+		case pos := <-self.seq.PosChan:
+			_, err = conn.Write([]byte(strconv.FormatUint(pos, 10)))
 			if err == io.EOF {
-				continue
+				goto CloseConnection
 			}
 			if err != nil {
 				panic(err)
-			}
-			var res Response
-			pes, er := ReadPatternEdits(conn)
-			if er != nil {
-				panic(er)
-			}
-			for _, pe := range pes {
-				err = self.seq.RemoveFrom(pe.Pos, pe.Note)
-				if err != nil {
-					panic(err)
-				}
-			}
-			res = Response{"ok", "note removed"}
-			ew := res.writeJSON(conn)
-			if ew != nil {
-				panic(ew)
 			}
 		}
 	}
-}
-
-// patternPosition generates a websocket endpoint for sending
-// pattern position
-func (self *server) patternPosition() websocket.Handler {
-	return func(conn *websocket.Conn) {
-		for pos := range self.seq.PosChan {
-			// broadcast position
-			msg, err := json.Marshal(pos)
-			if err != nil {
-				panic(err)
-			}
-			bytesWritten, err := conn.Write(msg)
-			if err != nil {
-				panic(err)
-			}
-			if bytesWritten != len(msg) {
-				panic(fmt.Errorf("wrote %d out of %d bytes", bytesWritten, len(msg)))
-			}
-		}
-	}
+CloseConnection:
 }
 
 // close closes the audio engine
@@ -203,14 +151,15 @@ func newServer(www string) (*server, error) {
 	fileServer := http.FileServer(http.Dir(www))
 	// static file server
 	http.Handle("/", fileServer)
-	// rest endpoints
+	// http endpoints
 	http.HandleFunc("/samples", srv.samples.list())
 	// websocket endpoints
 	http.Handle("/sample/play", srv.samples.play())
-	http.Handle("/note/add", srv.noteAdd())
-	http.Handle("/note/remove", srv.noteRemove())
-	http.Handle("/pattern/play", srv.patternPlay())
-	http.Handle("/pattern/stop", srv.patternStop())
-	http.Handle("/pattern/position", srv.patternPosition())
+	http.Handle("/sequencer", websocket.Handler(srv.sequencerEndpoint))
+	// http.Handle("/note/remove", srv.noteRemove())
+	// http.Handle("/pattern/play", srv.patternPlay())
+	// http.Handle("/pattern/stop", srv.patternStop())
+	// http.Handle("/pattern/position", srv.patternPosition())
+	/* /sequencer */
 	return srv, nil
 }

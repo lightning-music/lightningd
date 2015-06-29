@@ -44,11 +44,11 @@ func newSequencer(engine lightning.Engine, patternSize int, tempo float32) *sequ
 }
 
 // Play plays all the notes stored at pos
-func (this *sequencer) PlayNotesAt(pos uint64) error {
+func (self *sequencer) PlayNotesAt(pos uint64) error {
 	var err error
-	for _, note := range this.pattern.NotesAt(pos) {
+	for _, note := range self.pattern.NotesAt(pos) {
 		if note != nil {
-			err = this.engine.PlayNote(note)
+			err = self.engine.PlayNote(note)
 			if err != nil {
 				return err
 			}
@@ -60,32 +60,37 @@ func (this *sequencer) PlayNotesAt(pos uint64) error {
 // NotesAt returns a slice representing the notes
 // that are stored at a particular position in the
 // sequencer's Pattern.
-func (this *sequencer) NotesAt(pos uint64) []*lightning.Note {
-	return this.pattern.NotesAt(pos)
+func (self *sequencer) NotesAt(pos uint64) []*lightning.Note {
+	return self.pattern.NotesAt(pos)
 }
 
 // AddTo adds a note to the sequencer's pattern at pos.
-func (this *sequencer) AddTo(pos uint64, note *lightning.Note) error {
-	return this.pattern.AddTo(pos, note)
+func (self *sequencer) AddTo(pos uint64, note *lightning.Note) error {
+	return self.pattern.AddTo(pos, note)
 }
 
 // AddTo adds a note to the sequencer's pattern at pos.
-func (this *sequencer) RemoveFrom(pos uint64, note *lightning.Note) error {
-	return this.pattern.RemoveFrom(pos, note)
+func (self *sequencer) RemoveFrom(pos uint64, note *lightning.Note) error {
+	return self.pattern.RemoveFrom(pos, note)
 }
 
 // Clear removes all the notes at a given position
 // in the sequencer's Pattern.
-func (this *sequencer) Clear(pos uint64) error {
-	return this.pattern.Clear(pos)
+func (self *sequencer) Clear(pos uint64) error {
+	return self.pattern.Clear(pos)
 }
 
 // Start plays the sequencer's Pattern.
-func (this *sequencer) Start() error {
-	return this.metro.Start()
+func (self *sequencer) Start() error {
+	return self.metro.Start()
 }
 
 // Stop playing the sequencer's Pattern.
-func (this *sequencer) Stop() error {
-	return this.metro.Stop()
+func (self *sequencer) Stop() error {
+	return self.metro.Stop()
+}
+
+// SetTempo sets the tempo in bpm and returns the old tempo
+func (self *sequencer) SetTempo(bpm float32) float32 {
+	return self.metro.SetTempo(bpm)
 }

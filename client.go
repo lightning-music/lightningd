@@ -9,34 +9,35 @@ import (
 
 type client struct {
 	PatternPosition chan uint64
-	patternPlay     *websocket.Conn
-	patternStop     *websocket.Conn
+	sequencer       *websocket.Conn
 }
 
 func (self *client) play() error {
-	msg := make([]byte, 4)
-	_, err := self.patternPlay.Write(msg)
+	buf, err := json.Marshal("start")
+	if err != nil {
+		return err
+	}
+	_, err = self.sequencer.Write(buf)
+	if err == nil {
+		fmt.Println("sent sequencer start message")
+	}
 	return err
 }
 
 func (self *client) stop() error {
-	msg := make([]byte, 4)
-	_, err := self.patternStop.Write(msg)
+	buf, err := json.Marshal("stop")
+	if err != nil {
+		return err
+	}
+	_, err = self.sequencer.Write(buf)
 	return err
 }
 
-func (self *client) receivePosition(origin, host string, port int, cher chan error) {
-	posUrl := fmt.Sprintf("ws://%s:%d/pattern/position", host, port)
-	conn, err := websocket.Dial(posUrl, "", origin)
-	if err != nil {
-		cher <-err
-		return
-	}
-	cher <-nil
+func (self *client) receivePosition(origin, host string, port int) {
 	var pos uint64
 	msg := make([]byte, 8)
 	for {
-		bytesRead, err := conn.Read(msg)
+		bytesRead, err := self.sequencer.Read(msg)
 		if err == io.EOF {
 			continue
 		}
@@ -48,30 +49,20 @@ func (self *client) receivePosition(origin, host string, port int, cher chan err
 			panic(err)
 		}
 		fmt.Printf("received pos %v\n", pos)
-		self.PatternPosition <-pos
+		self.PatternPosition <- pos
 	}
 }
 
 func newClient(origin string, port int) (*client, error) {
 	var err error
-	cher := make(chan error)
 	c := new(client)
 	c.PatternPosition = make(chan uint64)
 	host := "localhost"
-	playUrl := fmt.Sprintf("ws://%s:%d/pattern/play", host, port)
-	stopUrl := fmt.Sprintf("ws://%s:%d/pattern/stop", host, port)
-	c.patternPlay, err = websocket.Dial(playUrl, "", origin)
+	seqUrl := fmt.Sprintf("ws://%s:%d/sequencer", host, port)
+	c.sequencer, err = websocket.Dial(seqUrl, "", origin)
 	if err != nil {
 		return nil, err
 	}
-	c.patternStop, err = websocket.Dial(stopUrl, "", origin)
-	if err != nil {
-		return nil, err
-	}
-	go c.receivePosition(origin, host, port, cher)
-	err = <-cher
-	if err != nil {
-		return nil, err
-	}
+	go c.receivePosition(origin, host, port)
 	return c, nil
 }

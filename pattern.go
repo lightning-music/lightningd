@@ -15,28 +15,28 @@ type Pattern struct {
 	Notes  [][]*lightning.Note `json:"notes"`
 }
 
-func (this *Pattern) indexTooLarge(pos uint64) error {
+func (self *Pattern) indexTooLarge(pos uint64) error {
 	str := "pos (%d) greater than pattern length (%d)"
-	return fmt.Errorf(str, pos, this.Length)
+	return fmt.Errorf(str, pos, self.Length)
 }
 
 // NotesAt returns a slice representing the notes
 // that are stored at a particular position in a pattern.
 // pos modulo the size of the pattern is the actual index into
 // the pattern.
-func (this *Pattern) NotesAt(pos uint64) []*lightning.Note {
-	notes := len(this.Notes)
-	return this.Notes[int(pos)%notes]
+func (self *Pattern) NotesAt(pos uint64) []*lightning.Note {
+	notes := len(self.Notes)
+	return self.Notes[int(pos)%notes]
 }
 
 // AddTo adds a Note to the pattern at pos
-func (this *Pattern) AddTo(pos uint64, note *lightning.Note) error {
-	if pos >= uint64(this.Length) {
-		return this.indexTooLarge(pos)
+func (self *Pattern) AddTo(pos uint64, note *lightning.Note) error {
+	if pos >= uint64(self.Length) {
+		return self.indexTooLarge(pos)
 	}
 	// try to insert to a nil position
 	inserted := false
-	notes := this.Notes[int(pos)]
+	notes := self.Notes[int(pos)]
 	for i, n := range notes {
 		if n == nil {
 			inserted = true
@@ -45,18 +45,18 @@ func (this *Pattern) AddTo(pos uint64, note *lightning.Note) error {
 	}
 	// if there were no nil positions, append
 	if !inserted {
-		this.Notes[int(pos)] = append(notes, note)
+		self.Notes[int(pos)] = append(notes, note)
 	}
 	return nil
 }
 
 // RemoveFrom removes a note from a particular position in a pattern
-func (this *Pattern) RemoveFrom(pos uint64, note *lightning.Note) error {
-	if pos >= uint64(this.Length) {
-		return this.indexTooLarge(pos)
+func (self *Pattern) RemoveFrom(pos uint64, note *lightning.Note) error {
+	if pos >= uint64(self.Length) {
+		return self.indexTooLarge(pos)
 	}
 	// remove a note with the same sample and same number, if one exists
-	notes := this.Notes[int(pos)]
+	notes := self.Notes[int(pos)]
 	for i, n := range notes {
 		if n != nil && n.Number == note.Number && n.Sample == note.Sample {
 			notes[i] = nil
@@ -65,13 +65,12 @@ func (this *Pattern) RemoveFrom(pos uint64, note *lightning.Note) error {
 	return nil
 }
 
-// Clear removes all the notes at a given position
-// in the pattern.
-func (this *Pattern) Clear(pos uint64) error {
-	if pos >= uint64(this.Length) {
-		return this.indexTooLarge(pos)
+// Clear removes all the notes at a given position in the pattern
+func (self *Pattern) Clear(pos uint64) error {
+	if pos >= uint64(self.Length) {
+		return self.indexTooLarge(pos)
 	}
-	this.Notes[pos] = make([]*lightning.Note, 0)
+	self.Notes[pos] = make([]*lightning.Note, 0)
 	return nil
 }
 
@@ -83,19 +82,19 @@ func NewPattern(size int) *Pattern {
 	}
 }
 
-// PatternEdit represents a single edit operation on a pattern
-type PatternEdit struct {
+// Event represents a single edit operation on a pattern
+type Event struct {
 	Pos  uint64          `json:"pos"`
 	Note *lightning.Note `json:"note"`
 }
 
-func (self *PatternEdit) WriteJSON(w io.Writer) error {
+func (self *Event) WriteJSON(w io.Writer) error {
 	enc := json.NewEncoder(w)
 	return enc.Encode(self)
 }
 
-func ReadPatternEdit(r io.Reader) (*PatternEdit, error) {
-	dec, pe := json.NewDecoder(r), new(PatternEdit)
+func ReadEvent(r io.Reader) (*Event, error) {
+	dec, pe := json.NewDecoder(r), new(Event)
 	ed := dec.Decode(pe)
 	if ed != nil {
 		return nil, ed
@@ -103,8 +102,8 @@ func ReadPatternEdit(r io.Reader) (*PatternEdit, error) {
 	return pe, nil
 }
 
-func ReadPatternEdits(r io.Reader) ([]PatternEdit, error) {
-	dec, pes := json.NewDecoder(r), make([]PatternEdit, 0)
+func ReadEvents(r io.Reader) ([]Event, error) {
+	dec, pes := json.NewDecoder(r), make([]Event, 0)
 	ed := dec.Decode(pes)
 	if ed != nil {
 		return nil, ed

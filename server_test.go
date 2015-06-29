@@ -26,10 +26,12 @@ func TestServer(t *testing.T) {
 		t.Fatal(err)
 	}
 	positions := make([]bool, 16)
+	fmt.Println("getting pattern positions")
 	for pos := range c.PatternPosition {
 		if pos == uint64(16) {
 			break
 		}
+		fmt.Printf("got %v\n", pos)
 		positions[pos] = true
 	}
 	for i, received := range positions {
